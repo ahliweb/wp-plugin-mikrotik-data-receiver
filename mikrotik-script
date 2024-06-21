@@ -1,16 +1,13 @@
-# MikroTik Script
-
 /ip firewall filter
-add chain=forward action=log log-prefix="new-connection: " log=yes
-
+add chain=forward action=log log-prefix="new-connection:" log=yes
 
 /system script
 add name=sendData policy=read,write source="
-:local logMessage [:toarray [/log find where message~\"new-connection:\"]]
+:local logMessage [/log find where message~\"new-connection:\"]
 :foreach i in=\$logMessage do={
     :local message [/log get \$i message]
     :local time [/log get \$i time]
-
+    
     :if ([:find \$message \"new-connection: \"] != 0) do={
         :local details [:pick \$message 17 [:len \$message]]
         :local ip [:pick \$details 0 [:find \$details \" \" -1]]
@@ -24,14 +21,13 @@ add name=sendData policy=read,write source="
         :local interface \"ether1\"
         :local status \"active\"
 
-        /tool fetch url=\"https://yourdomain.com/wp-json/mikrotik/v1/data\" \
+        /tool fetch url=\"https://dispursip.kotawaringinbaratkab.go.id/v2/wp-json/mikrotik/v1/data\" \
         http-method=post \
-        http-data=\"username=\$username&ip=\$ip&mac=\$mac&upload=\$upload&download=\$download&duration=\$duration&interface=\$interface&status=\$status&token=xxx\"
+        http-data=\"username=\$username&ip=\$ip&mac=\$mac&upload=\$upload&download=\$download&duration=\$duration&interface=\$interface&status=\$status&token=7a5e2be0aa77d0502ba49d6adad14bf04bc85aa40252d138cd122c69322a5828\"
     }
+    /log remove \$i
 }
 "
 
-
 /system scheduler
 add name=scheduleSendData interval=10m on-event=sendData
-
