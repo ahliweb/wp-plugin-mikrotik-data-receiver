@@ -2,7 +2,7 @@
 /*
 Plugin Name: MikroTik Data Receiver
 Description: Menerima data dari MikroTik dan menampilkan data di halaman administrator.
-Version: 1.0
+Version: 1.1
 Author: unggul@ahliweb.co.id - https://ahliweb.co.id 
 */
 
@@ -12,12 +12,11 @@ if (!defined('ABSPATH')) {
 
 class MikroTik_Data_Receiver {
 
-    private $token = 'xxx'; // Replace with your secure token
-
     public function __construct() {
         add_action('rest_api_init', array($this, 'register_routes'));
         add_action('admin_menu', array($this, 'register_admin_page'));
         register_activation_hook(__FILE__, array($this, 'create_database_table'));
+        register_activation_hook(__FILE__, array($this, 'insert_initial_token'));
     }
 
     public function register_routes() {
@@ -28,13 +27,14 @@ class MikroTik_Data_Receiver {
     }
 
     public function handle_mikrotik_data(WP_REST_Request $request) {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'mikrotik_token';
+        $stored_token = $wpdb->get_var("SELECT token FROM $table_name LIMIT 1");
+        
         $token = $request->get_param('token');
 
-        // Token yang di-generate sebelumnya
-        $expected_token = $this->token;
-
         // Validasi token
-        if ($token !== $expected_token) {
+        if ($token !== $stored_token) {
             return new WP_REST_Response('Unauthorized', 401);
         }
 
@@ -48,9 +48,8 @@ class MikroTik_Data_Receiver {
         $status = sanitize_text_field($request->get_param('status'));
 
         // Simpan data di database WordPress
-        global $wpdb;
-        $table_name = $wpdb->prefix . 'mikrotik_data';
-        $wpdb->insert($table_name, array(
+        $data_table_name = $wpdb->prefix . 'mikrotik_data';
+        $wpdb->insert($data_table_name, array(
             'username' => $username,
             'ip' => $ip,
             'mac' => $mac,
@@ -67,10 +66,11 @@ class MikroTik_Data_Receiver {
 
     public function create_database_table() {
         global $wpdb;
-        $table_name = $wpdb->prefix . 'mikrotik_data';
+        $data_table_name = $wpdb->prefix . 'mikrotik_data';
+        $token_table_name = $wpdb->prefix . 'mikrotik_token';
         $charset_collate = $wpdb->get_charset_collate();
 
-        $sql = "CREATE TABLE $table_name (
+        $sql_data_table = "CREATE TABLE $data_table_name (
             id bigint(20) NOT NULL AUTO_INCREMENT,
             username varchar(255) NOT NULL,
             ip varchar(255) NOT NULL,
@@ -84,8 +84,26 @@ class MikroTik_Data_Receiver {
             PRIMARY KEY (id)
         ) $charset_collate;";
 
+        $sql_token_table = "CREATE TABLE $token_table_name (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            token varchar(255) NOT NULL,
+            PRIMARY KEY (id)
+        ) $charset_collate;";
+
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        dbDelta($sql);
+        dbDelta($sql_data_table);
+        dbDelta($sql_token_table);
+    }
+
+    public function insert_initial_token() {
+        global $wpdb;
+        $token_table_name = $wpdb->prefix . 'mikrotik_token';
+        $default_token = 'xxx';
+
+        // Insert initial token if not exists
+        if ($wpdb->get_var("SELECT COUNT(*) FROM $token_table_name") == 0) {
+            $wpdb->insert($token_table_name, array('token' => $default_token));
+        }
     }
 
     public function register_admin_page() {
@@ -102,18 +120,27 @@ class MikroTik_Data_Receiver {
 
     public function admin_page_content() {
         global $wpdb;
-        $table_name = $wpdb->prefix . 'mikrotik_data';
-        $total = $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
-        $last_day = $wpdb->get_var("SELECT COUNT(*) FROM $table_name WHERE time > DATE_SUB(NOW(), INTERVAL 1 DAY)");
-        $last_week = $wpdb->get_var("SELECT COUNT(*) FROM $table_name WHERE time > DATE_SUB(NOW(), INTERVAL 7 DAY)");
-        $last_month = $wpdb->get_var("SELECT COUNT(*) FROM $table_name WHERE time > DATE_SUB(NOW(), INTERVAL 30 DAY)");
-        $last_year = $wpdb->get_var("SELECT COUNT(*) FROM $table_name WHERE time > DATE_SUB(NOW(), INTERVAL 1 YEAR)");
+        $data_table_name = $wpdb->prefix . 'mikrotik_data';
+        $token_table_name = $wpdb->prefix . 'mikrotik_token';
+        $total = $wpdb->get_var("SELECT COUNT(*) FROM $data_table_name");
+        $last_day = $wpdb->get_var("SELECT COUNT(*) FROM $data_table_name WHERE time > DATE_SUB(NOW(), INTERVAL 1 DAY)");
+        $last_week = $wpdb->get_var("SELECT COUNT(*) FROM $data_table_name WHERE time > DATE_SUB(NOW(), INTERVAL 7 DAY)");
+        $last_month = $wpdb->get_var("SELECT COUNT(*) FROM $data_table_name WHERE time > DATE_SUB(NOW(), INTERVAL 30 DAY)");
+        $last_year = $wpdb->get_var("SELECT COUNT(*) FROM $data_table_name WHERE time > DATE_SUB(NOW(), INTERVAL 1 YEAR)");
 
-        $data = $wpdb->get_results("SELECT * FROM $table_name ORDER BY time DESC LIMIT 100");
+        $data = $wpdb->get_results("SELECT * FROM $data_table_name ORDER BY time DESC LIMIT 100");
+        $stored_token = $wpdb->get_var("SELECT token FROM $token_table_name LIMIT 1");
+
+        if (isset($_POST['new_token'])) {
+            $new_token = sanitize_text_field($_POST['new_token']);
+            $wpdb->update($token_table_name, array('token' => $new_token), array('id' => 1));
+            $stored_token = $new_token;
+            echo '<div id="message" class="updated notice is-dismissible"><p>Token updated successfully.</p></div>';
+        }
 
         echo '<div class="wrap">';
         echo '<h1>MikroTik Data</h1>';
-        echo '<p>By AhliWeb.co.id</p><hr />';
+        echo '<p>Version 1.1 - By AhliWeb.co.id</p><hr />';
         echo '<h2>Rekapitulasi</h2>';
         echo '<ul>';
         echo '<li>Jumlah 1 hari terakhir: ' . $last_day . '</li>';
@@ -141,6 +168,18 @@ class MikroTik_Data_Receiver {
             echo '</tr>';
         }
         echo '</tbody></table>';
+
+        echo '<h2>Update Token</h2>';
+        echo '<form method="post" action="">';
+        echo '<table class="form-table">';
+        echo '<tr valign="top">';
+        echo '<th scope="row">Current Token</th>';
+        echo '<td><input type="text" name="new_token" value="' . esc_attr($stored_token) . '" class="regular-text" /></td>';
+        echo '</tr>';
+        echo '</table>';
+        echo '<p class="submit"><input type="submit" class="button-primary" value="Update Token" /></p>';
+        echo '</form>';
+        
         echo '</div>';
     }
 }
@@ -188,3 +227,5 @@ function mikrotik_data_shortcode($atts) {
     return ob_get_clean();
 }
 add_shortcode('mikrotik_data', 'mikrotik_data_shortcode');
+
+?>
