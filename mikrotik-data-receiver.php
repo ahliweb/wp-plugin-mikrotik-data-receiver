@@ -188,5 +188,3 @@ function mikrotik_data_shortcode($atts) {
     return ob_get_clean();
 }
 add_shortcode('mikrotik_data', 'mikrotik_data_shortcode');
-
-
