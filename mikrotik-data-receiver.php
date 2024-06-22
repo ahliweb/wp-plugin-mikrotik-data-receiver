@@ -29,7 +29,11 @@ class MikroTik_Data_Receiver {
     public function handle_mikrotik_data(WP_REST_Request $request) {
         global $wpdb;
         $table_name = $wpdb->prefix . 'mikrotik_token';
-        $stored_token = $wpdb->get_var("SELECT token FROM $table_name LIMIT 1");
+        $stored_token = wp_cache_get('mikrotik_token');
+        if (false === $stored_token) {
+            $stored_token = $wpdb->get_var($wpdb->prepare("SELECT token FROM $table_name LIMIT 1"));
+            wp_cache_set('mikrotik_token', $stored_token);
+        }
         
         $token = $request->get_param('token');
 
@@ -98,10 +102,10 @@ class MikroTik_Data_Receiver {
     public function insert_initial_token() {
         global $wpdb;
         $token_table_name = $wpdb->prefix . 'mikrotik_token';
-        $default_token = 'xxx';
+        $default_token = 'xxx'; // change with your sha1 token
 
         // Insert initial token if not exists
-        if ($wpdb->get_var("SELECT COUNT(*) FROM $token_table_name") == 0) {
+        if ($wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $token_table_name")) == 0) {
             $wpdb->insert($token_table_name, array('token' => $default_token));
         }
     }
@@ -122,18 +126,24 @@ class MikroTik_Data_Receiver {
         global $wpdb;
         $data_table_name = $wpdb->prefix . 'mikrotik_data';
         $token_table_name = $wpdb->prefix . 'mikrotik_token';
-        $total = $wpdb->get_var("SELECT COUNT(*) FROM $data_table_name");
-        $last_day = $wpdb->get_var("SELECT COUNT(*) FROM $data_table_name WHERE time > DATE_SUB(NOW(), INTERVAL 1 DAY)");
-        $last_week = $wpdb->get_var("SELECT COUNT(*) FROM $data_table_name WHERE time > DATE_SUB(NOW(), INTERVAL 7 DAY)");
-        $last_month = $wpdb->get_var("SELECT COUNT(*) FROM $data_table_name WHERE time > DATE_SUB(NOW(), INTERVAL 30 DAY)");
-        $last_year = $wpdb->get_var("SELECT COUNT(*) FROM $data_table_name WHERE time > DATE_SUB(NOW(), INTERVAL 1 YEAR)");
 
-        $data = $wpdb->get_results("SELECT * FROM $data_table_name ORDER BY time DESC LIMIT 100");
-        $stored_token = $wpdb->get_var("SELECT token FROM $token_table_name LIMIT 1");
+        $total = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $data_table_name"));
+        $last_day = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $data_table_name WHERE time > DATE_SUB(NOW(), INTERVAL 1 DAY)"));
+        $last_week = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $data_table_name WHERE time > DATE_SUB(NOW(), INTERVAL 7 DAY)"));
+        $last_month = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $data_table_name WHERE time > DATE_SUB(NOW(), INTERVAL 30 DAY)"));
+        $last_year = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $data_table_name WHERE time > DATE_SUB(NOW(), INTERVAL 1 YEAR)"));
 
-        if (isset($_POST['new_token'])) {
+        $data = $wpdb->get_results($wpdb->prepare("SELECT * FROM $data_table_name ORDER BY time DESC LIMIT 100"));
+        $stored_token = wp_cache_get('mikrotik_token');
+        if (false === $stored_token) {
+            $stored_token = $wpdb->get_var($wpdb->prepare("SELECT token FROM $token_table_name LIMIT 1"));
+            wp_cache_set('mikrotik_token', $stored_token);
+        }
+
+        if (isset($_POST['new_token']) && check_admin_referer('update_token_nonce')) {
             $new_token = sanitize_text_field($_POST['new_token']);
             $wpdb->update($token_table_name, array('token' => $new_token), array('id' => 1));
+            wp_cache_set('mikrotik_token', $new_token);
             $stored_token = $new_token;
             echo '<div id="message" class="updated notice is-dismissible"><p>Token updated successfully.</p></div>';
         }
@@ -143,11 +153,11 @@ class MikroTik_Data_Receiver {
         echo '<p>Version 1.1 - By AhliWeb.co.id</p><hr />';
         echo '<h2>Rekapitulasi</h2>';
         echo '<ul>';
-        echo '<li>Jumlah 1 hari terakhir: ' . $last_day . '</li>';
-        echo '<li>Jumlah 7 hari terakhir: ' . $last_week . '</li>';
-        echo '<li>Jumlah 30 hari terakhir: ' . $last_month . '</li>';
-        echo '<li>Jumlah 1 tahun terakhir: ' . $last_year . '</li>';
-        echo '<li>Total: ' . $total . '</li>';
+        echo '<li>Jumlah 1 hari terakhir: ' . esc_html($last_day) . '</li>';
+        echo '<li>Jumlah 7 hari terakhir: ' . esc_html($last_week) . '</li>';
+        echo '<li>Jumlah 30 hari terakhir: ' . esc_html($last_month) . '</li>';
+        echo '<li>Jumlah 1 tahun terakhir: ' . esc_html($last_year) . '</li>';
+        echo '<li>Total: ' . esc_html($total) . '</li>';
         echo '</ul>';
 
         echo '<h2>Data Terbaru</h2>';
@@ -171,6 +181,7 @@ class MikroTik_Data_Receiver {
 
         echo '<h2>Update Token</h2>';
         echo '<form method="post" action="">';
+        wp_nonce_field('update_token_nonce');
         echo '<table class="form-table">';
         echo '<tr valign="top">';
         echo '<th scope="row">Current Token</th>';
@@ -194,7 +205,7 @@ function mikrotik_data_shortcode($atts) {
     $limit = 10;
     $offset = ($page - 1) * $limit;
 
-    $total_items = $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
+    $total_items = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $table_name"));
     $total_pages = ceil($total_items / $limit);
 
     $results = $wpdb->get_results($wpdb->prepare("SELECT * FROM $table_name ORDER BY time DESC LIMIT %d OFFSET %d", $limit, $offset));
@@ -220,7 +231,7 @@ function mikrotik_data_shortcode($atts) {
     echo '<div class="pagination">';
     for ($i = 1; $i <= $total_pages; $i++) {
         $active = ($i == $page) ? 'active' : '';
-        echo '<a class="page-numbers ' . $active . '" href="' . get_permalink() . '?paged=' . $i . '">' . $i . '</a>';
+        echo '<a class="page-numbers ' . esc_html($active) . '" href="' . esc_url(get_permalink()) . '?paged=' . esc_html($i) . '">' . esc_html($i) . '</a>';
     }
     echo '</div>';
 
