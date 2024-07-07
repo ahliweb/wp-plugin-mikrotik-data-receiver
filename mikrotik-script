@@ -1,7 +1,6 @@
 /ip firewall filter
 add chain=forward action=log log-prefix="new-connection:" log=yes
 
-
 /system script
 add name=sendData policy=read,write source="
 :local logMessages [/log find where message~\"new-connection:\"]
@@ -14,23 +13,27 @@ add name=sendData policy=read,write source="
         :local ip [:pick \$details 0 [:find \$details \" \" -1]]
         :local mac [:pick \$details ([:find \$details \" \" -1] + 1) [:len \$details]]
 
-        # Dummy data for demonstration, replace with actual values if available
-        :local username \"example_username\"
-        :local upload \"1024\"
-        :local download \"2048\"
-        :local duration \"3600\"
-        :local interface \"ether1\"
-        :local status \"active\"
+        # Mengambil username dari hotspot atau user
+        :local username [/ip hotspot active get [find where mac-address=\$mac] user]
 
-        /tool fetch url=\"https://domain.com/wp-json/mikrotik/v1/data\" \
+        # Mengambil statistik upload dan download dari interface
+        :local interface ([/interface find where running and ([get name] ~ \"ether\")] -> [:pick -1])  # Menemukan interface yang sedang berjalan
+        :local upload ([/interface monitor-traffic interface=\$interface once as-value] -> [:pick -1] -> [:find \$mac] -> get value1)
+        :local download ([/interface monitor-traffic interface=\$interface once as-value] -> [:pick -1] -> [:find \$mac] -> get value2)
+
+        # Menghitung durasi berdasarkan waktu koneksi
+        :local duration ([:totime \$time] - [:totime [/ip hotspot active get [find where mac-address=\$mac] login-time]])
+
+        # Status koneksi
+        :local status ([/interface monitor-traffic interface=\$interface once as-value] -> [:pick -1] -> [:find \$mac] -> get status)
+
+        /tool fetch url=\"https://yourdomain.com/wp-json/mikrotik/v1/data\" \
         http-method=post \
-        http-data=\"username=\$username&ip=\$ip&mac=\$mac&upload=\$upload&download=\$download&duration=\$duration&interface=\$interface&status=\$status&token=xxx\"
+        http-data=\"username=\$username&ip=\$ip&mac=\$mac&upload=\$upload&download=\$download&duration=\$duration&interface=\$interface&status=\$status&token=your-token\"
     }
     /log remove \$i
 }
 "
-
-
 
 /system scheduler
 add name=scheduleSendData interval=10m on-event=sendData
