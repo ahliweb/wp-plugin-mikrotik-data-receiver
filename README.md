@@ -1,6 +1,3 @@
-Based on the repository available at [GitHub](https://github.com/ahliweb/wp-plugin-mikrotik-data-receiver), here is an improved `README.md` for the plugin that details its functionalities and usage instructions.
-
-```markdown
 # MikroTik Data Receiver Plugin
 
 ## Overview
@@ -63,6 +60,24 @@ add name=sendData policy=read,write source="
 add name=scheduleSendData interval=10m on-event=sendData
 ```
 
+### Removing the MikroTik Script
+
+To remove the previously added script from your MikroTik router, use the following commands:
+
+```plaintext
+# Remove firewall rule
+/ip firewall filter
+remove [find log-prefix="new-connection:"]
+
+# Remove script
+/system script
+remove [find name="sendData"]
+
+# Remove scheduler
+/system scheduler
+remove [find name="scheduleSendData"]
+```
+
 ### Admin Panel
 
 1. Navigate to the 'MikroTik Data' page under the WordPress admin menu to view the received data.
@@ -103,4 +118,4 @@ For support and inquiries, please visit [ahliweb.co.id](https://ahliweb.co.id).
 
 ```
 
-This `README.md` provides a comprehensive guide on how to use the MikroTik Data Receiver plugin, including installation, configuration, and security features. It also outlines the plugin's functionalities and how to manage and view data within the WordPress admin panel.
+This `README.md` file provides a comprehensive guide on how to use the MikroTik Data Receiver plugin, including installation, configuration, security features, and instructions for removing the MikroTik script. It also outlines the plugin's functionalities and how to manage and view data within the WordPress admin panel.
