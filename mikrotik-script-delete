@@ -1,0 +1,11 @@
+# Menghapus aturan firewall
+/ip firewall filter
+remove [find log-prefix="new-connection:"]
+
+# Menghapus script
+/system script
+remove [find name="sendData"]
+
+# Menghapus scheduler
+/system scheduler
+remove [find name="scheduleSendData"]
