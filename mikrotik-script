@@ -27,9 +27,11 @@ add name=sendData policy=read,write source="
         # Status koneksi
         :local status ([/interface monitor-traffic interface=\$interface once as-value] -> [:pick -1] -> [:find \$mac] -> get status)
 
-        /tool fetch url=\"https://yourdomain.com/wp-json/mikrotik/v1/data\" \
+        # Pengiriman data menggunakan tool fetch dengan header dan body yang sesuai
+        /tool fetch url=\"https://yourdomain/wp-json/mikrotik/v1/data\" \
         http-method=post \
-        http-data=\"username=\$username&ip=\$ip&mac=\$mac&upload=\$upload&download=\$download&duration=\$duration&interface=\$interface&status=\$status&token=your-token\"
+        http-header-field=\"Content-Type: application/x-www-form-urlencoded\" \
+        http-data=\"username=\$username&ip=\$ip&mac=\$mac&upload=\$upload&download=\$download&duration=\$duration&interface=\$interface&status=\$status&token=yourtoken\"
     }
     /log remove \$i
 }
